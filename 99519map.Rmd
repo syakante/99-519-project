@@ -1,0 +1,77 @@
+---
+title: "99519leaflet"
+author: "me"
+date: "6/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F)
+```
+
+```{r}
+library(readr)
+library(tidyverse)
+library(leaflet)
+
+raw <- read_csv("https://data.wprdc.org/datastore/dump/044f2016-1dfd-4ab0-bc1e-065da05fca2e", col_names = T)
+
+toy <- subset(raw, INCIDENTTIME >= "2021-05-01")
+myCols = c("HIERARCHY", "INCIDENTTIME", "INCIDENTLOCATION", "INCIDENTNEIGHBORHOOD", "INCIDENTZONE", "INCIDENTHIERARCHYDESC", "OFFENSES", "X", "Y")
+#tiny <- head(toy, 30) %>% select(myCols)
+tiny <- toy %>% select(myCols)
+```
+
+```{r}
+#geoJSON
+policejson <- geojsonio::geojson_read("Police_Zones.geojson", what="sp")
+neighbors <- geojsonio::geojson_read("pgh_neighborhoods.geojson", what="sp")
+zoning <- geojsonio::geojson_read("pgh_zoning.geojson", what="sp")
+```
+
+
+```{r}
+pal <- colorFactor(topo.colors(6), policejson$zone)
+
+library(RColorBrewer)
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+
+pal2 <- colorFactor(col_vector[1:23], zoning$legendtype)
+tiny <- tiny %>% filter(X*Y != 0 & !is.na(X) & !is.na(Y))
+```
+
+
+```{r}
+map <- leaflet(data = tiny) %>% addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data = policejson, group="Police Zones",
+              stroke = F,
+              fillColor = ~pal(zone)) %>%
+  addPolygons(data = neighbors, group="Neighborhoods",
+              fill = T,
+              fillOpacity = 0,
+              color = "black",
+              weight = 1,
+              popup = ~as.character(hood)) %>%
+  # addPolygons(data = zoning, group="Urban Planning Zones",
+  #             fillColor = ~pal2(legendtype),
+  #             stroke = F,
+  #             popup = ~as.character(legendtype)) %>%
+  addCircleMarkers(lng = ~X, lat=~Y, 
+                   popup = ~as.character(OFFENSES), 
+                   radius = 5,
+                   stroke = F,
+                   group = "markers") %>%
+  addLayersControl(
+    overlayGroups = c("markers", "Police Zones", "Neighborhoods")
+  )
+map
+#TODO: color/popup each by offense category or whatever im lazy rn
+#also the circlemarkers are only some of them but I don't remember over what time period
+```
+
+```{r}
+# hmm todo: figure out how to use the geoJSON to make columns for the incident's urban planning zone and if it occurred somewhere with 25% slope. Im thinking about combining these somehow to do PCA? 
+# ok sike its impossible (not impossible just pointlessly difficult for my purposes (weary emoji))
+```
+
